@@ -36,29 +36,33 @@ import (
 // multiple goroutines.
 type Resource struct {
 	// ID is the name the clients use to access this resource.
-	ID string
+	ID string // 申请的资源id
 
 	// This mutex guards access to all properties defined below.
 	mu sync.RWMutex
 	// store contains leases granted to all clients for this
 	// resource.
+	// 包含授予此资源的所有客户端的租约。
 	store LeaseStore
 
 	algorithm           Algorithm
-	learner             Algorithm
-	learningModeEndTime time.Time
-	config              *pb.ResourceTemplate
+	learner             Algorithm            // 学习模式下的容量分配
+	learningModeEndTime time.Time            // 学习模式下的截止时间
+	config              *pb.ResourceTemplate //ID对应的资源模板
 
 	// expiryTime is the expiration time for this resource
 	// specified by a lower-level server (e.g. by the root server).
 	// The root server should ignore it, because it does not have
 	// any server which is lower it in the server tree.
+	// 是由底层服务器(例如根服务器)指定的该资源的过期时间。
+	// 根服务器应该忽略它，因为它在服务器树中没有比它更低的服务器。
 	expiryTime *time.Time
 }
 
 // capacity returns the current available capacity for res. Note: this
 // does not lock the resource, and should be called only when the
 // lock is already taken.
+// 返回res的当前可用容量。注意:这不会锁定资源，并且应该只在锁已经被占用时调用。
 func (res *Resource) capacity() float64 {
 
 	if res.expiryTime != nil && res.expiryTime.Before(time.Now()) {
@@ -78,6 +82,7 @@ func (res *Resource) Release(client string) {
 }
 
 // SetSafeCapacity sets the safe capacity in a response.
+// 设置响应中的安全容量。
 func (res *Resource) SetSafeCapacity(resp *pb.ResourceResponse) {
 	res.mu.RLock()
 	defer res.mu.RUnlock()
@@ -88,6 +93,8 @@ func (res *Resource) SetSafeCapacity(resp *pb.ResourceResponse) {
 	// know about.
 	// TODO(josv): The calculation of the dynamic safe capacity
 	// needs to take sub clients into account (in a multi-server tree).
+	// 如果资源配置没有配置安全容量，我们将返回一个动态安全容量，它等于容量除以我们知道的客户端数量。
+	// 需要考虑到子客户端(在多服务器树中)。
 	if res.config.SafeCapacity == nil {
 		resp.SafeCapacity = proto.Float64(*res.config.Capacity / float64(res.store.Count()))
 	} else {
@@ -97,12 +104,14 @@ func (res *Resource) SetSafeCapacity(resp *pb.ResourceResponse) {
 
 // Decide runs an algorithm, and returns the leased assigned to
 // client. learning should be true if the server is in learning mode.
+// 运行一个算法，并返回分配给客户的租赁。如果服务器处于学习模式，则学习应该为真。
 func (res *Resource) Decide(request Request) Lease {
 	// NOTE(ryszard): Eventually the refresh interval should depend
 	// on the level of the server in the tree.
 	res.mu.Lock()
 	defer res.mu.Unlock()
 
+	// 清理过期租约
 	res.store.Clean()
 
 	if res.learningModeEndTime.After(time.Now()) {
@@ -114,13 +123,14 @@ func (res *Resource) Decide(request Request) Lease {
 
 // LoadConfig loads cfg into the resource. LoadConfig takes care of
 // locking the resource.
+// config转成resource
 func (res *Resource) LoadConfig(cfg *pb.ResourceTemplate, expiryTime *time.Time) {
 	res.mu.Lock()
 	defer res.mu.Unlock()
-	res.config = cfg
-	res.expiryTime = expiryTime
-	algo := cfg.GetAlgorithm()
-	res.algorithm = GetAlgorithm(algo)
+	res.config = cfg                   // 模板配置
+	res.expiryTime = expiryTime        // 过期时间   新建时设置nil
+	algo := cfg.GetAlgorithm()         // 容量分配算法相关配置
+	res.algorithm = GetAlgorithm(algo) //容量分配算法
 	res.learner = Learn(algo)
 }
 
@@ -150,8 +160,11 @@ func (server *Server) newResource(id string, cfg *pb.ResourceTemplate) *Resource
 	// algorithm the learning mode duration equals the lease length, because
 	// that is the maximum time after which we can assume clients to have either
 	// reported in or lost their lease.
+	// 计算学习模式结束时间。
+	// 如果在算法中没有指定，则学习模式持续时间等于租约长度，因为这是我们可以假定客户已报告或丢失租约的最大时间。
 	algo := res.config.GetAlgorithm()
 
+	// 新创建的resource指定学习模式持续的时间
 	var learningModeDuration time.Duration
 
 	if algo.LearningModeDuration != nil {
@@ -187,6 +200,7 @@ type ResourceStatus struct {
 }
 
 // Status returns a read-only view of res.
+// resource状态信息
 func (res *Resource) Status() ResourceStatus {
 	res.mu.RLock()
 	defer res.mu.RUnlock()

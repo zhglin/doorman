@@ -22,6 +22,7 @@ const (
 
 // Backoff returns a value in [0, maxDelay] that increases exponentially with
 // retries, starting from baseDelay.
+// 已factor的倍数进行退避
 func Backoff(baseDelay, maxDelay time.Duration, retries int) time.Duration {
 	backoff, max := float64(baseDelay), float64(maxDelay)
 	for backoff < max && retries > 0 {

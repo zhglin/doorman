@@ -25,9 +25,10 @@ type pair struct {
 	err  error
 }
 
-// LocalFiles is a configuration stored in a file in the local
+// LocalFile LocalFiles is a configuration stored in a file in the local
 // filesystem. The file will be reloaded if the process receives a
 // SIGHUP.
+// LocalFiles是存储在本地文件系统中的文件中的配置。如果进程接收到SIGHUP，文件将被重新加载。
 func LocalFile(path string) Source {
 	updates := make(chan pair, 1)
 
@@ -56,9 +57,10 @@ func LocalFile(path string) Source {
 func Etcd(path string, endpoints []string) Source {
 
 	updates := make(chan pair, 1)
-	req := make(chan context.Context)
+	req := make(chan context.Context) // 通知
 
 	go func() {
+		// 建立etcd链接  失败一直重试 直到成功
 		var c client.Client
 		for i := 0; true; i++ {
 			var err error
@@ -84,7 +86,7 @@ func Etcd(path string, endpoints []string) Source {
 		w := kapi.Watcher(path, nil)
 
 		for i := 0; true; i++ {
-			ctx := <-req
+			ctx := <-req // 阻塞 除非w.Next返回
 			r, err := w.Next(ctx)
 			if err != nil {
 				updates <- pair{err: err}
@@ -96,6 +98,7 @@ func Etcd(path string, endpoints []string) Source {
 
 	}()
 
+	// 通过此函数的执行 控制etcd的读取
 	return func(ctx context.Context) (data []byte, err error) {
 		req <- ctx
 		p := <-updates

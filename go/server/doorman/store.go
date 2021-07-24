@@ -19,16 +19,20 @@ import "time"
 // Lease represents a lease on capacity for some resource for some client.
 type Lease struct {
 	// Expiry is the time at which this lease expires.
+	// 租约到期的时间。
 	Expiry time.Time
 
 	// RefreshInterval is the interval at which the client should
 	// poll for updates for this resource.
+	// 是客户机应轮询此资源的更新的时间间隔。
 	RefreshInterval time.Duration
 
 	// Has is how much capacity was given to this client.
+	// 是给这个客户端多少容量。
 	Has float64
 
 	// Wants is how much capacity was requested.
+	// 是请求的想要的容量。
 	Wants float64
 
 	// Subclients is the number of subclients of this client.
@@ -118,6 +122,7 @@ func NewLeaseStore(id string) LeaseStore {
 	}
 }
 
+// Count 返回存储中子客户端租期的数量。
 func (store *leaseStoreImpl) Count() int64 {
 	return store.count
 }
@@ -126,6 +131,7 @@ func (store *leaseStoreImpl) SumWants() float64 {
 	return store.sumWants
 }
 
+// SumHas 将返回目前提供给客户的总容量。
 func (store *leaseStoreImpl) SumHas() float64 {
 	return store.sumHas
 }
@@ -135,10 +141,12 @@ func (store *leaseStoreImpl) HasClient(client string) bool {
 	return ok
 }
 
+// Get 返回当前授予此客户端的租约。
 func (store *leaseStoreImpl) Get(client string) Lease {
 	return store.leases[client]
 }
 
+// Release 释放客户端申请的资源容量
 func (store *leaseStoreImpl) Release(client string) {
 	lease, ok := store.leases[client]
 	if !ok {
@@ -150,13 +158,19 @@ func (store *leaseStoreImpl) Release(client string) {
 	delete(store.leases, client)
 }
 
+// Assign 更新租赁存储以表示提供给客户端的容量。
+// client 客户端标识
+// leaseLength 租约时长
+// refreshInterval 客户端刷新间隔
 func (store *leaseStoreImpl) Assign(client string, leaseLength, refreshInterval time.Duration, has, wants float64, subclients int64) Lease {
 	lease := store.leases[client]
 
+	// 更新最新的统计值
 	store.sumHas += has - lease.Has
 	store.sumWants += wants - lease.Wants
 	store.count += subclients - lease.Subclients
 
+	// 更新租约信息
 	lease.Has, lease.Wants = has, wants
 	lease.Expiry = time.Now().Add(leaseLength)
 	lease.RefreshInterval = refreshInterval
@@ -166,6 +180,7 @@ func (store *leaseStoreImpl) Assign(client string, leaseLength, refreshInterval 
 	return lease
 }
 
+// Clean 删除任何过期租约。返回已清除租约的数量
 func (store *leaseStoreImpl) Clean() int {
 	when := time.Now()
 	result := 0

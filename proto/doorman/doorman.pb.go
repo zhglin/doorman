@@ -540,13 +540,17 @@ func (m *NamedParameter) GetValue() string {
 }
 
 type Algorithm struct {
+	// 应该使用Doorman的哪种算法来在客户端之间分配容量。
 	Kind *Algorithm_Kind `protobuf:"varint,1,req,name=kind,enum=doorman.Algorithm_Kind" json:"kind,omitempty"`
 	// How long should the lease be, in seconds.
+	// 该算法所授予的容量租约的长度(单位为秒)。典型值为300秒。
 	LeaseLength *int64 `protobuf:"varint,2,req,name=lease_length" json:"lease_length,omitempty"`
 	// How many seconds should the client wait until refreshing its
 	// lease.
-	RefreshInterval *int64            `protobuf:"varint,3,req,name=refresh_interval" json:"refresh_interval,omitempty"`
-	Parameters      []*NamedParameter `protobuf:"bytes,4,rep,name=parameters" json:"parameters,omitempty"`
+	// 客户端请求联系Doorman服务器进行容量刷新的时间间隔(秒)。典型值为5秒。
+	RefreshInterval *int64 `protobuf:"varint,3,req,name=refresh_interval" json:"refresh_interval,omitempty"`
+	// 算法的命名参数是为算法指定附加参数的一种方法。
+	Parameters []*NamedParameter `protobuf:"bytes,4,rep,name=parameters" json:"parameters,omitempty"`
 	// By default the learning mode duration is the lease length,
 	// however if you want to live dangerously, and assume that
 	// clients are living up to their responsibility to contact
@@ -555,6 +559,11 @@ type Algorithm struct {
 	// mode duration (longer than the lease length), but then you
 	// are a muppet (or you do not trust the clients, in which case
 	// you need to fix the client implementation).
+	// Doorman服务器为该资源学习模式的持续时间。
+	// 默认情况下，学习模式持续时间是租约长度，但是，如果您希望危险地生存，并假设客户端履行其责任，
+	// 每次refresh_interval联系服务器，您可以在这里指定一个更短的学习模式。
+	// 您还可以指定一个更长的学习模式持续时间(比租约长度更长)，
+	//但是这样您就是一个傀儡(或者您不信任客户端，在这种情况下您需要修复客户端实现)。
 	LearningModeDuration *int64 `protobuf:"varint,5,opt,name=learning_mode_duration" json:"learning_mode_duration,omitempty"`
 	XXX_unrecognized     []byte `json:"-"`
 }
@@ -603,8 +612,10 @@ func (m *Algorithm) GetLearningModeDuration() int64 {
 // for a resource based on a match with the identifier_glob glob.
 type ResourceTemplate struct {
 	// Glob used to match actual resources.
+	// 用于确定哪个模板应用于哪个资源标识符。配置中的'*'捕获所有条目适用于无法找到更特定模板的所有资源。在搜索配置时，Doorman服务器首先尝试找到一个具有确切名称的资源模板(不进行globbing)。如果该搜索没有生成模板，则使用globbing匹配完成第二次遍历。
 	IdentifierGlob *string `protobuf:"bytes,1,req,name=identifier_glob" json:"identifier_glob,omitempty"`
 	// Capacity in service units
+	// 资源的最大全局容量。这是Doorman能给的最大值。Doorman不知道单位是什么，但通常这个数字可以被认为是资源可以接受的最大qps(费率)或它可以处理的最大正在进行的事务(计量器)。
 	Capacity *float64 `protobuf:"fixed64,2,req,name=capacity" json:"capacity,omitempty"`
 	// Algorithm used to divide capacity between clients.
 	Algorithm *Algorithm `protobuf:"bytes,3,req,name=algorithm" json:"algorithm,omitempty"`
@@ -614,6 +625,11 @@ type ResourceTemplate struct {
 	// If this field is absent the system returns a dynamic safe capacity in
 	// the response, which is the available capacity divided by the number of
 	// clients that the server knows about.
+	// 资源的“安全容量”是Doorman客户端在Doorman服务器不可用时使用的容量。
+	// 如果您将此设置为-1，Doorman限制将在Doorman下线时禁用。
+	// 如果将其设置为0，则客户端将完全停止使用该资源。
+	// 如果您将其设置为正数，那么每个客户端就会像从Doorman服务器接收到容量分配一样工作。
+	// 如果不指定safe_capacity, Doorman服务器将计算动态安全容量，该容量等于配置的最大容量除以Doorman服务器知道的客户端数量。
 	SafeCapacity *float64 `protobuf:"fixed64,4,opt,name=safe_capacity" json:"safe_capacity,omitempty"`
 	// Description of the resource.
 	Description      *string `protobuf:"bytes,5,opt,name=description" json:"description,omitempty"`
@@ -749,10 +765,12 @@ var _ grpc.ClientConn
 type CapacityClient interface {
 	// Used by clients to discover the master Doorman server.
 	Discovery(ctx context.Context, in *DiscoveryRequest, opts ...grpc.CallOption) (*DiscoveryResponse, error)
-	// Used by clients to obtain capacity from Doorman.
+	// GetCapacity Used by clients to obtain capacity from Doorman.
+	// 用于客户端从doorman处获得容量。
 	GetCapacity(ctx context.Context, in *GetCapacityRequest, opts ...grpc.CallOption) (*GetCapacityResponse, error)
-	// Used by Doorman servers to get capacity on behalf of their clients from
+	// GetServerCapacity Used by Doorman servers to get capacity on behalf of their clients from
 	// lower level Doorman servers.
+	// 由Doorman服务器使用，代表其客户从较低级别的Doorman服务器获得容量。
 	GetServerCapacity(ctx context.Context, in *GetServerCapacityRequest, opts ...grpc.CallOption) (*GetServerCapacityResponse, error)
 	// Used by clients to release any capacity they have for one or more
 	// resources.

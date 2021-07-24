@@ -58,6 +58,7 @@ var (
 
 	rpcDialTimeout = flag.Duration("doorman_rpc_dial_timeout", 5*time.Second, "timeout to use for connecting to the doorman server")
 
+	// 父节点的刷新间隔
 	minimumRefreshInterval = flag.Duration("doorman_minimum_refresh_interval", 5*time.Second, "minimum refresh interval")
 
 	tls      = flag.Bool("tls", false, "Connection uses TLS if true, else plain TCP")
@@ -184,6 +185,7 @@ func main() {
 		log.Exit("-config cannot be empty")
 	}
 
+	// 加载资源模板配置文件
 	var cfg configuration.Source
 	kind, path := configuration.ParseSource(*config)
 	switch {
@@ -201,9 +203,10 @@ func main() {
 	// Try to load the background. If there's a problem with loading
 	// the server for the first time, the server will keep running,
 	// but will not serve traffic.
+	// 设置配置
 	go func() {
 		for {
-			data, err := cfg(context.Background())
+			data, err := cfg(context.Background()) // 会阻塞
 			if err != nil {
 				log.Errorf("cannot load config data: %v", err)
 				continue
@@ -232,6 +235,7 @@ func main() {
 
 	// Waits for the server to get its initial configuration. This guarantees that
 	// the server will never run without a valid configuration.
+	// 等待服务器获得其初始配置。这保证了服务器在没有有效配置的情况下永远不会运行。
 	log.Info("Waiting for the server to be configured...")
 	dm.WaitUntilConfigured()
 
